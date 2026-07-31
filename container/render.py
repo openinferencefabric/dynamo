@@ -73,7 +73,7 @@ def parse_args():
         "--device",
         type=str,
         default="cuda",
-        choices=["cuda", "xpu", "cpu"],
+        choices=["cuda", "xpu", "cpu", "rocm"],
         help="Dockerfile device to use",
     )
 
@@ -125,7 +125,7 @@ def parse_args():
 def validate_args(args):
     valid_inputs = {
         "vllm": {
-            "device": ["cuda", "xpu", "cpu"],
+            "device": ["cuda", "xpu", "cpu", "rocm"],
             "target": [
                 "runtime",
                 "dev",
@@ -147,7 +147,7 @@ def validate_args(args):
             "cuda_version": ["13.1"],
         },
         "sglang": {
-            "device": ["cuda", "xpu"],
+            "device": ["cuda", "xpu", "rocm"],
             "target": [
                 "runtime",
                 "dev",
@@ -209,6 +209,12 @@ def validate_args(args):
             if args.device == "xpu" and args.platform != "amd64":
                 raise ValueError(
                     f"XPU builds require --platform linux/amd64, "
+                    f"got '{args.platform}'"
+                )
+            # ROCm is only supported on amd64 (AMD Instinct accelerators)
+            if args.device == "rocm" and args.platform != "amd64":
+                raise ValueError(
+                    f"ROCm builds require --platform linux/amd64, "
                     f"got '{args.platform}'"
                 )
             return
