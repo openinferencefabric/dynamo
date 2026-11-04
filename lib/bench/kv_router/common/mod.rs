@@ -10,7 +10,8 @@ pub mod args;
 #[cfg(any(
     feature = "active-sequences",
     feature = "mooncake",
-    feature = "router-test-support"
+    feature = "router-test-support",
+    feature = "selection-replay"
 ))]
 pub mod clock;
 #[cfg(any(feature = "dc-ckf-consumer", feature = "dc-ckf-relay"))]
@@ -22,14 +23,16 @@ pub mod dc_ckf_shared;
     feature = "approximate-lru",
     feature = "dc-ckf-relay",
     feature = "mooncake",
-    feature = "router-test-support"
+    feature = "router-test-support",
+    feature = "selection-replay"
 ))]
 pub mod issuer;
 #[cfg(any(
     feature = "active-sequences",
     feature = "dc-ckf-relay",
     feature = "mooncake",
-    feature = "router-test-support"
+    feature = "router-test-support",
+    feature = "selection-replay"
 ))]
 pub mod progress;
 #[cfg(any(
@@ -42,7 +45,8 @@ pub mod replay;
 #[cfg(any(
     feature = "active-sequences",
     feature = "mooncake",
-    feature = "router-test-support"
+    feature = "router-test-support",
+    feature = "selection-replay"
 ))]
 pub mod results;
 #[cfg(any(
