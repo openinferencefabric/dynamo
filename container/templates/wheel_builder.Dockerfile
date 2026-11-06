@@ -675,7 +675,14 @@ RUN --mount=type=secret,id=aws-web-identity-token,target=/run/secrets/aws-token 
             arm64) ARCH_ALT=aarch64 ;; \
             *) echo "ERROR: unexpected TARGETARCH='${TARGETARCH}'; cannot pick a manylinux platform tag" >&2; exit 1 ;; \
         esac && \
+{% if device == "rocm" %}
+    # rocm builds in its runtime base (vllm/vllm-openai-rocm), not manylinux_2_28:
+    # tag the wheel for that image's own glibc, which follows the base image tag.
+    GLIBC_TAG=$(ldd --version | head -n1 | grep -oE '[0-9]+\.[0-9]+$' | tr . _) && \
+    MANYLINUX_POLICY=manylinux_${GLIBC_TAG}_${ARCH_ALT} && \
+{% else %}
     MANYLINUX_POLICY=manylinux_{{ "2_35" if device == "cpu" else "2_28" }}_${ARCH_ALT} && \
+{% endif %}
 {% endif %}
         maturin build --release --features "media-ffmpeg,kv-indexer,slot-tracker,select-service,mm-routing,ais-forward-pass,request-trace-s3,nvtx" --auditwheel skip --out target/wheels && \
         auditwheel repair \
