@@ -19,7 +19,7 @@ ARG DEVICE={{ device }}
    propagates to every included template, not just this one. #}
 
 # Python/CUDA configuration
-{# Per-device override, mirroring nixl_ref/enable_kvbm below. The wheel_builder
+{# Per-device override, mirroring nixl_ref below. The wheel_builder
    venv is created with this interpreter, so it must match the runtime image or
    the NIXL wheel it produces is unusable there (e.g. a cp312 wheel cannot install
    into the Python 3.10 sglang ROCm image). #}
