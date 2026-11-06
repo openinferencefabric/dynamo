@@ -221,8 +221,8 @@ RUN --mount=type=cache,id=uv-root-{{ context.dynamo.uv_version }},target=/root/.
    NIXL pybind11 extensions in one interpreter, and whichever loads second dies
    with:
        ImportError: generic_type: type "nixl_thread_sync_t" is already registered!
-   vLLM reaches NIXL through `rixl` on ROCm (see the rixl re-export below), so
-   the meta package is not needed. #}
+   vLLM imports nixl_rocm directly on ROCm (see the check below), so the meta
+   package is not needed. #}
 {% if device not in ("cuda", "rocm") %}
 # NIXL meta package always tries to find a cuda-backend
 # https://github.com/ai-dynamo/nixl/blob/v1.1.0/src/bindings/python/nixl-meta/nixl/__init__.py
@@ -258,25 +258,22 @@ RUN --mount=type=cache,id=uv-root-{{ context.dynamo.uv_version }},target=/root/.
 {% endif %}
 
 {% if device == "rocm" %}
-{# vllm/distributed/nixl_utils.py imports `rixl._api` when current_platform.is_rocm().
-   RIXL is not the implementation here: this is a name-only namespace that
-   re-exports the upstream nixl_rocm built in wheel_builder. Asserting the
-   re-export resolves keeps a silently-broken KV path from shipping. #}
-RUN SITE_PACKAGES="$(python3 -c 'import site; print(site.getsitepackages()[0])')" && \
-    mkdir -p "${SITE_PACKAGES}/rixl" && \
-    printf 'from nixl_rocm import *  # noqa: F401,F403\n' > "${SITE_PACKAGES}/rixl/__init__.py" && \
-    printf 'from nixl_rocm._api import *  # noqa: F401,F403\n' > "${SITE_PACKAGES}/rixl/_api.py" && \
-    printf 'from nixl_rocm._bindings import *  # noqa: F401,F403\n' > "${SITE_PACKAGES}/rixl/_bindings.py" && \
-    python3 -c "import importlib.util, sys; \
-spec = importlib.util.find_spec('nixl_rocm'); \
-sys.exit('nixl_rocm not importable -- check -Dwheel_variant=rocm in wheel_builder') if spec is None else None" && \
+{# vLLM >= 0.26.1 imports NIXL on ROCm as `nixl_rocm` (vllm/distributed/nixl_utils.py,
+   _get_nixl_package_name), the module wheel_builder builds with -Dwheel_variant=rocm,
+   so no `rixl` alias is needed. Fail the build if this vLLM still looks for another
+   name, or if nixl_rocm is missing or shares the interpreter with nixl_cu12, rather
+   than ship a KV-transfer path that dies at runtime with "NIXL is not available". #}
+RUN python3 -c "import importlib.util, sys; \
+sys.exit('nixl_rocm not importable -- check -Dwheel_variant=rocm in wheel_builder') \
+if importlib.util.find_spec('nixl_rocm') is None else None" && \
     python3 -c "import importlib.util, sys; \
 sys.exit('nixl_cu12 must not be co-installed with nixl_rocm: two NIXL pybind11 \
 extensions in one interpreter abort with \'nixl_thread_sync_t is already registered\'') \
 if importlib.util.find_spec('nixl_cu12') is not None else None" && \
-    python3 -c "from rixl._api import nixl_agent; from nixl_rocm._api import nixl_agent as direct; \
-assert nixl_agent is direct, 'rixl shim does not resolve to nixl_rocm'; \
-print('rixl -> nixl_rocm re-export OK')"
+    python3 -c "import inspect, vllm.distributed.nixl_utils as u, sys; \
+src = inspect.getsource(u._get_nixl_package_name); \
+sys.exit('this vLLM does not import nixl_rocm on ROCm: ' + src) if '\"nixl_rocm\"' not in src else print('vLLM imports nixl_rocm on ROCm: OK')" && \
+    python3 -c "from nixl_rocm._api import nixl_agent; print('nixl_rocm agent:', nixl_agent.__name__)"
 {% endif %}
 
 {% if target not in ("dev", "local-dev") %}
