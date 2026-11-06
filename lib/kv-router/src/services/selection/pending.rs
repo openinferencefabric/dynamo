@@ -13,7 +13,8 @@ use dynamo_tokens::SequenceHash;
 use parking_lot::Mutex;
 
 use crate::identity::RoutingPartitionId;
-use crate::protocols::{LocalBlockHash, WorkerWithDpRank};
+use crate::kv_hints::{KvCopySource, KvTransferCandidates};
+use crate::protocols::{ExternalSequenceBlockHash, LocalBlockHash, WorkerWithDpRank};
 use crate::scheduling::SessionContext;
 
 /// How long a pending selection lives before it is evicted.
@@ -65,6 +66,31 @@ pub(super) struct PendingSelection {
     /// The request's agent session, kept only for a partition with hint policies, which read it
     /// when the booking replays.
     pub session_context: Option<SessionContext>,
+    /// The copy the selection committed the worker to, which the replayed booking must send.
+    pub kv_copy: Option<PendingKvCopy>,
+}
+
+/// A committed copy kept for a replayed booking: the copy, and only what its locations need.
+pub(super) struct PendingKvCopy {
+    pub copy: KvCopySource,
+    /// The request's block chain through the source's prefix, and the cache-owner snapshot.
+    pub candidates: KvTransferCandidates,
+}
+
+impl PendingKvCopy {
+    pub(super) fn new(copy: KvCopySource, candidates: &KvTransferCandidates) -> Self {
+        let blocks = copy
+            .source_prefix_blocks()
+            .min(candidates.block_hashes.len());
+        Self {
+            copy,
+            candidates: KvTransferCandidates {
+                block_hashes: candidates.block_hashes[..blocks].to_vec(),
+                routing_snapshot: candidates.routing_snapshot.clone(),
+                ..KvTransferCandidates::default()
+            },
+        }
+    }
 }
 
 struct Entry {
@@ -92,6 +118,9 @@ fn entry_bytes(key: &CacheKey, selection: &PendingSelection) -> usize {
             .session_context
             .as_ref()
             .map_or(0, |session| session.session_id().len())
+        + selection.kv_copy.as_ref().map_or(0, |copy| {
+            copy.candidates.block_hashes.len() * std::mem::size_of::<ExternalSequenceBlockHash>()
+        })
 }
 
 struct State {
@@ -287,6 +316,7 @@ mod tests {
             routing_hashes: None,
             session_id: None,
             session_context: None,
+            kv_copy: None,
         }
     }
 
