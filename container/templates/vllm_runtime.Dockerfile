@@ -54,6 +54,7 @@ ENV TORCH_LIB_DIR=${SITE_PACKAGES}/torch/lib
 ENV NIXL_PREFIX=/opt/nvidia/nvda_nixl
 ENV NIXL_LIB_DIR=${NIXL_PREFIX}/lib/x86_64-linux-gnu
 {% elif device == "rocm" %}
+ENV TORCH_LIB_DIR=${SITE_PACKAGES}/torch/lib
 ENV NIXL_PREFIX=/opt/amd/amd_nixl
 ENV NIXL_LIB_DIR=${NIXL_PREFIX}/lib/x86_64-linux-gnu
 {% endif %}
@@ -198,9 +199,9 @@ COPY --chmod=775 --chown=dynamo:0 --from=wheel_builder /opt/dynamo/dist/*.whl /o
 {# ROCm's vllm-openai-rocm base uses the system interpreter (no /opt/venv), so it
    targets --system like cuda; xpu/cpu bases carry a venv at /opt/venv. #}
 {% set pip_target = "--system" if device in ("cuda", "rocm") else "--python /opt/venv/bin/python" %}
-{% set python_executable = "python3" if device == "cuda" else "/opt/venv/bin/python" %}
+{% set python_executable = "python3" if device in ("cuda", "rocm") else "/opt/venv/bin/python" %}
 {% if device != "cuda" %}
-{% set vllm_rs_link = "${VIRTUAL_ENV}/bin/vllm-rs" %}
+{% set vllm_rs_link = "/usr/local/bin/vllm-rs" if device == "rocm" else "${VIRTUAL_ENV}/bin/vllm-rs" %}
 {# vLLM <0.31 rejects the extra output fields added by Omni. #}
 {% set vllm_rs_allowlist = "1" if target not in ("dev", "local-dev") else "0" %}
 {% set vllm_rs_plugins = "modelexpress,dynamo_nixl_telemetry" if context.vllm.enable_modelexpress == "true" else "dynamo_nixl_telemetry" %}
@@ -559,8 +560,8 @@ RUN --mount=type=bind,source=./container/deps/requirements.vllm.txt,target=/tmp/
     uv pip install {{ pip_target }} --reinstall-package imageio-ffmpeg --no-deps \
         --requirement /tmp/requirements.vllm.nonvidia.txt && \
     rm -f /tmp/requirements.vllm.nonvidia.txt && \
-    /opt/venv/bin/python -c "import importlib.util,sys; sys.exit(1 if importlib.util.find_spec('PyNvVideoCodec') else 0)" && \
-    /opt/venv/bin/python -c "import importlib.metadata as m, re, sys; names={re.sub(r'[-_.]+', '-', n).lower() for d in m.distributions() if (n := (d.metadata or {}).get('Name'))}; sys.exit(1 if 'mooncake-transfer-engine-cuda13' in names else 0)" && \
+    {{ python_executable }} -c "import importlib.util,sys; sys.exit(1 if importlib.util.find_spec('PyNvVideoCodec') else 0)" && \
+    {{ python_executable }} -c "import importlib.metadata as m, re, sys; names={re.sub(r'[-_.]+', '-', n).lower() for d in m.distributions() if (n := (d.metadata or {}).get('Name'))}; sys.exit(1 if 'mooncake-transfer-engine-cuda13' in names else 0)" && \
     rm -rf /opt/uv/cache
 {% endif %}
 
